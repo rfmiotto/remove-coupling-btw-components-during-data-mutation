@@ -1,9 +1,11 @@
 import * as Icons from "@heroicons/react/solid";
 import { useRouter } from "next/router";
 import { useState } from "react";
-import { useQuery } from "react-query";
+import { useMutation, useQuery } from "react-query";
+
 import { Spinner } from "../../components/Spinner";
 import api from "../../services/api";
+import { queryClient } from "../../services/queryClient";
 
 type EventObject = {
   content: string;
@@ -11,7 +13,6 @@ type EventObject = {
   date: string;
   dateTime: string;
   type: string;
-  person: any;
 };
 
 interface EventProps {
@@ -66,8 +67,11 @@ export default function Person() {
 
   const router = useRouter();
 
+  const queryKey = ["people", router.query.pid];
+  const sidebarQueryKey = ["people"];
+
   const { data } = useQuery<any, Error>(
-    ["people", router.query.pid],
+    queryKey,
     async () => {
       const response = await api.get(`/people/${router.query.pid}`);
       return response.data;
@@ -75,36 +79,57 @@ export default function Person() {
     { suspense: true }
   );
 
-  async function addEvent(personId: string | string[] | undefined) {
-    setIsSaving(true);
-
-    /*
-    Let us explain what the problem we are trying to solve is:
-    In this example, when we click to add an event, our UI does not update
-    because we are not revalidating our data. To perform such revalidation
-    with React Query, we would have to focus in other screen and the refocus
-    on our page. However, this is an undesired behavior.
-    Notice also that we are making two re-fetches: one for our main screen
-    to display the events, and another one inside of MyApp component, that
-    renders the sidebar and display the number of events each person has.
-    We would like more control of that.
-    Ideally, we want to re-fetch a person's data right after we click to add a
-    new event so that it updates the UI. React Query has a mutate function which
-    we can use to do just that.
-    */
-    await api.post("events", {
+  function addEvent(personId: string) {
+    return api.post("events", {
       personId,
     });
-
-    setIsSaving(false);
   }
+
+  /*
+  The first approach to solve this problem is to use a mutation. In React Query,
+  we have the useMutation hook, where we pass the function that we expect to
+  bring an updated data from the server. In this case, it is the addEvent
+  function. Optionally, as a second argument, we can pass some configurations.
+  1. onMutate tells what to do during the mutation;
+  2. onError tells what to do when an error occurs. We get the error, the variables
+     used in the process and the context that it belongs to;
+  3. onSettled tells what to do when the mutation ends independently whether the
+     mutation gives an error or not. Here, we will ask to invalidate the query,
+     which means that React Query will re-fetch the data;
+  */
+  const mutation = useMutation(addEvent, {
+    onMutate: () => setIsSaving(true),
+    onSettled: async () => {
+      // Since the query invalidations are happening in serial, we need to wrap
+      // them in a Promise.all to avoid laggings in the UI update.
+      await Promise.all([
+        queryClient.invalidateQueries(queryKey),
+        queryClient.invalidateQueries(sidebarQueryKey),
+      ]);
+      setIsSaving(false);
+    },
+  });
+
+  /*
+  This approach solves our problem and gives us the desired UI behavior that we
+  would expect. However, we still have an implicit coupling between the
+  function component Person and MyApp due to the query keys. If in one day one
+  decides to change the "person" query key, they would have to do it in multiple
+  components that potentially live in separate files.
+  Therefore, although this solution works, that is not what we really wanna do.
+  We don't want this coupling between components.
+  Ideally, we want to have a single function that invalidates all of our live
+  queries. We want a function that knows we have a query "people" and another
+  query, say, "people/3" and that goes ahead and manually re-run those after we
+  make the mutation.
+  */
 
   return (
     <div className="px-6">
       <div className="mt-4 flex justify-between">
         <p className="text-2xl font-semibold">{data.person.name}</p>
         <button
-          onClick={() => addEvent(router.query.pid)}
+          onClick={() => mutation.mutate(router.query.pid as string)}
           type="button"
           disabled={isSaving}
           className="inline-flex items-center px-2 py-2 text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 focus:outline-none"
