@@ -78,8 +78,23 @@ export default function Person() {
   async function addEvent(personId: string | string[] | undefined) {
     setIsSaving(true);
 
-    // Create the event
-    console.log({ personId });
+    /*
+    Let us explain what the problem we are trying to solve is:
+    In this example, when we click to add an event, our UI does not update
+    because we are not revalidating our data. To perform such revalidation
+    with React Query, we would have to focus in other screen and the refocus
+    on our page. However, this is an undesired behavior.
+    Notice also that we are making two re-fetches: one for our main screen
+    to display the events, and another one inside of MyApp component, that
+    renders the sidebar and display the number of events each person has.
+    We would like more control of that.
+    Ideally, we want to re-fetch a person's data right after we click to add a
+    new event so that it updates the UI. React Query has a mutate function which
+    we can use to do just that.
+    */
+    await api.post("events", {
+      personId,
+    });
 
     setIsSaving(false);
   }
