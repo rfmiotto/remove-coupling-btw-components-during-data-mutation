@@ -5,7 +5,7 @@ import { useMutation, useQuery } from "react-query";
 
 import { Spinner } from "../../components/Spinner";
 import api from "../../services/api";
-import { queryClient } from "../../services/queryClient";
+import { revalidateLiveQueriesOnScreen } from "../_app";
 
 type EventObject = {
   content: string;
@@ -68,7 +68,6 @@ export default function Person() {
   const router = useRouter();
 
   const queryKey = ["people", router.query.pid];
-  const sidebarQueryKey = ["people"];
 
   const { data } = useQuery<any, Error>(
     queryKey,
@@ -85,44 +84,14 @@ export default function Person() {
     });
   }
 
-  /*
-  The first approach to solve this problem is to use a mutation. In React Query,
-  we have the useMutation hook, where we pass the function that we expect to
-  bring an updated data from the server. In this case, it is the addEvent
-  function. Optionally, as a second argument, we can pass some configurations.
-  1. onMutate tells what to do during the mutation;
-  2. onError tells what to do when an error occurs. We get the error, the variables
-     used in the process and the context that it belongs to;
-  3. onSettled tells what to do when the mutation ends independently whether the
-     mutation gives an error or not. Here, we will ask to invalidate the query,
-     which means that React Query will re-fetch the data;
-  */
   const mutation = useMutation(addEvent, {
     onMutate: () => setIsSaving(true),
     onSettled: async () => {
-      // Since the query invalidations are happening in serial, we need to wrap
-      // them in a Promise.all to avoid laggings in the UI update.
-      await Promise.all([
-        queryClient.invalidateQueries(queryKey),
-        queryClient.invalidateQueries(sidebarQueryKey),
-      ]);
+      await revalidateLiveQueriesOnScreen();
+
       setIsSaving(false);
     },
   });
-
-  /*
-  This approach solves our problem and gives us the desired UI behavior that we
-  would expect. However, we still have an implicit coupling between the
-  function component Person and MyApp due to the query keys. If in one day one
-  decides to change the "person" query key, they would have to do it in multiple
-  components that potentially live in separate files.
-  Therefore, although this solution works, that is not what we really wanna do.
-  We don't want this coupling between components.
-  Ideally, we want to have a single function that invalidates all of our live
-  queries. We want a function that knows we have a query "people" and another
-  query, say, "people/3" and that goes ahead and manually re-run those after we
-  make the mutation.
-  */
 
   return (
     <div className="px-6">

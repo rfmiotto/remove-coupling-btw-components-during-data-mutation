@@ -137,3 +137,20 @@ function Wrapper({ Component, pageProps }: AppProps) {
 }
 
 export default Wrapper;
+
+/*
+Here is our solution. With this, we no longer have a coupling between components
+neither implicit nor explicit.
+*/
+
+export async function revalidateLiveQueriesOnScreen() {
+  const queryCache = queryClient.getQueryCache();
+
+  const liveQueriesOnScreen = queryCache.findAll({ active: true });
+
+  const queryKeys = liveQueriesOnScreen.map((query) => {
+    return query.queryKey;
+  });
+
+  await Promise.all(queryKeys.map((key) => queryClient.invalidateQueries(key)));
+}
