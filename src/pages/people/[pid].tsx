@@ -5,7 +5,7 @@ import { useMutation, useQuery } from "react-query";
 
 import { Spinner } from "../../components/Spinner";
 import api from "../../services/api";
-import { revalidateLiveQueriesOnScreen } from "../_app";
+import { queryClient } from "../../services/queryClient";
 
 type EventObject = {
   content: string;
@@ -87,7 +87,7 @@ export default function Person() {
   const mutation = useMutation(addEvent, {
     onMutate: () => setIsSaving(true),
     onSettled: async () => {
-      await revalidateLiveQueriesOnScreen();
+      await queryClient.invalidateQueries({ active: true });
 
       setIsSaving(false);
     },
